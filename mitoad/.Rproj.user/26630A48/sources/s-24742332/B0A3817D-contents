@@ -1,0 +1,8 @@
+install.packages(c("devtools", "roxygen2", "testthat", "knitr"))
+
+square<- function(x){
+  return(x*x)
+}
+devtools::create('Pkg1')
+
+square(2)

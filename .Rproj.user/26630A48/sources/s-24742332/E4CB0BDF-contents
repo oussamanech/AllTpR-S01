@@ -1,0 +1,280 @@
+library(dplyr)
+ #library(nycflights13)
+
+flights <- readRDS("Data/flights.RData")
+
+flights
+#############################################################################################
+#filter-----------
+#1-Время задержки прибытия (arrival delay) равно или превышает два часа = 120 мин. 
+filter(flights, arr_delay>=120)
+#2- • Отправлялись в Houston (IAH или HOU).
+filter(flights, dest == 'IAH' | dest == 'HOU')
+
+#3- • Находятся в ведении операторов UnitedAirlines= ua, American Airlines=aa, or Delta=DL
+filter(flights, carrier == 'UA' | carrier == 'AA' | carrier == 'DL')
+
+#4- • Отправлялись летом July, August, September.
+filter(flights, month %in% c(7, 8, 9))
+
+#5- • Прибыли позже более чем на 2 часа = 120 , но отправлялись вовремя = 0.
+filter(flights, arr_delay > 120, dep_delay <= 0)
+
+#6-  Задержались, по крайней мере, на час, но наверстали более 30 мнут в течение полета.
+filter(flights, dep_delay >= 60, dep_delay-arr_delay > 30)
+
+#7- • Отправлялись между полночью и 6 часами утра (включительно).
+filter(flights, dep_time <=600 | dep_time == 2400)
+
+#8- В каких случаях можно применить функцию between()?
+## between()- это более короткий и быстрый способ проверки двух неравенств одновременно:
+## он проверяет, больше ли его первый аргумент второму или равен ли его третьему или меньше.
+
+#9- Для скольких рейсов отсутствует значение dep_time? сводка (полеты)
+summary(flights)
+##В 8255 flights отсутствует `dep_time`
+
+#10-Для каких ещё переменных имеются отсутствующие значения? 
+## 8255 flights отсутствует 'dep_delay' 
+## 8713 flights отсутствует 'arr_time' 
+## 9430 flights отсутствует 'arr_delay' 
+## 9430 flights отсутствует 'air_time'
+
+#############################################################################################
+## Отсортируйте данные:
+#• По какой-либо переменной так, чтобы все NA были вначале (is.na()).
+df <- tibble(x = c(5, 2, NA))
+#arrange(df, is.na(x))
+arrange(df, desc(is.na(x)))
+#• Чтобы вначале оказались рейсы с наибольшим временем задержки.
+arrange(flights, dep_delay)
+# Чтобы вначале оказались рейсы, которые отправлялись наиболее раньше планируемого времени.
+arrange(flights, desc(dep_delay))
+#• Чтобы вначале оказались наименее длительные рейсы.
+arrange(flights, distance) %>% select(1:5, distance)
+
+#############################################################################################
+# Реализуйте как можно больше способов выбрать dep_time, dep_delay, arr_time и arr_delay.
+select(flights, dep_time,  dep_delay, arr_time, arr_delay)
+select(flights, c(dep_time,  dep_delay, arr_time, arr_delay))
+flights %>% select(dep_time,  dep_delay, arr_time, arr_delay)
+flights %>% select_("dep_time",  "dep_delay", "arr_time", "arr_delay")
+
+#Что будет, если вызвать несколько раз переменную в select()?
+#---->
+#Ничего не происходит, вы просто получаете переменную один раз.
+
+#Чем функция one_of() может быть полезна в сочетании с вектором
+vars <- c("year", "month", "day", "dep_delay", "arr_delay")
+#Он возвращает все запрошенные вами переменные, например, хранящиеся в векторе.
+flights %>% select(one_of(vars))
+
+#Преобразуйте данные в столбцах dep_time, sched_dep_time, arr_time, sched_arr_time, air_time
+mutate(flights,
+ dep_time = 60 * floor(dep_time/100) + (dep_time - floor(dep_time/100) * 100),
+ sched_dep_time = 60 * floor(sched_dep_time/100) + (sched_dep_time - floor(sched_dep_time/100) * 100),
+arr_time = 60 * floor(arr_time/100) + (arr_time - floor(arr_time/100) * 100),
+sched_arr_time = 60 * floor(sched_arr_time/100) + (sched_arr_time - floor(sched_arr_time/100) * 100),
+air_time = 60 * floor(air_time/100) + (air_time - floor(air_time/100) * 100))
+
+# Сравните air_time и arr_time - dep_time.
+flights %>% 
+  mutate(dep_time = (dep_time %/% 100) * 60 + (dep_time %% 100),
+         sched_dep_time = (sched_dep_time %/% 100) * 60 + (sched_dep_time %% 100),
+         arr_time = (arr_time %/% 100) * 60 + (arr_time %% 100),
+         sched_arr_time = (sched_arr_time %/% 100) * 60 + (sched_arr_time %% 100)) %>%
+  transmute((arr_time - dep_time) %% (60*24) - air_time)
+
+# Сравните dep_time, sched_dep_time и dep_delay.
+flights %>% 
+  mutate(dep_time = (dep_time %/% 100) * 60 + (dep_time %% 100),
+         sched_dep_time = (sched_dep_time %/% 100) * 60 + (sched_dep_time %% 100),
+         arr_time = (arr_time %/% 100) * 60 + (arr_time %% 100),
+         sched_arr_time = (sched_arr_time %/% 100) * 60 + (sched_arr_time %% 100)) %>%
+  transmute(near((sched_dep_time + dep_delay) %% (60*24), dep_time, tol=1))
+
+
+#Найдите 10 рейсов с наибольшей задержкой (используйте min_rank()).
+filter(flights, min_rank(desc(dep_delay))<=10)
+flights %>% top_n(n = 10, wt = dep_delay)
+#Оцените характеристики задержки по пяти различным группам рейсов:
+#1. Рейс вылетает на 15 минут раньше в 50% случаев и прилетает на 15 минут позже в 50% случаев.
+#2. Прибытие рейса всегда задерживается на 10 минут.
+#3. В 99% случаев рейс совершается вовремя. В 1% случаев задерживается на 2 часа.
+#4. Рейсы какого оператора задерживаются больше всего?
+#5. Для каждого самолета посчитайте количество рейсов до первого случая более чем часовой задержки.
+str(flights)
+head(flights)
+flight_delay_summary <- dplyr::group_by(flights, flight) %>% dplyr::summarise(num_flights = dplyr::n(),
+                                                                percentage_on_time = sum(arr_time == sched_arr_time)/num_flights,
+                                                                percentage_early = sum(arr_time < sched_arr_time)/num_flights, 
+                                                                percentage_15_mins_early = sum(sched_arr_time - arr_time == 15)/num_flights,
+                                                                percentage_late = sum(arr_time > sched_arr_time)/num_flights,
+                                                                percentage_15_mins_late = sum(arr_time - sched_arr_time == 15)/num_flights,
+                                                                percentage_2_hours_late = sum(arr_time - sched_arr_time == 120)/num_flights)
+flight_delay_summary
+########################**********-********************************************######################
+jan1 <- filter(flights, month == 1, day == 1)
+
+(dec25 <- filter(flights, month == 12, day == 25))
+
+# Floating point numbers
+sqrt(2) ^ 2 == 2
+1/49 * 49 == 1
+
+near(sqrt(2) ^ 2,  2)
+near(1 / 49 * 49, 1)
+
+# The following code finds all flights that departed in November or December:
+filter(flights, month == 11 | month == 12)
+
+# It finds all months that equal 11 | 12, that evaluates to TRUE, i.e. 1 (January)
+filter(flights, month == 11 | 12)
+
+# %in%
+nov_dec <- filter(flights, month %in% c(11, 12))
+
+# Flights that weren’t delayed (on arrival or departure) by more than two hours
+filter(flights, !(arr_delay > 120 | dep_delay > 120))
+filter(flights, arr_delay <= 120, dep_delay <= 120)
+
+# To preserve NA
+df <- tibble(x = c(1, NA, 3))
+filter(df, x > 1)
+filter(df, is.na(x) | x > 1)
+
+#arrange-----------
+
+arrange(flights, year, month, day)
+
+arrange(flights, desc(arr_delay))
+
+# Missing values are always sorted at the end:
+df <- tibble(x = c(5, 2, NA))
+arrange(df, x)
+arrange(df, desc(x))
+
+#select-----------
+
+select(flights, year, month, day)
+
+# Select all columns between year and day (inclusive)
+select(flights, year:day)
+
+# Select all columns except those from year to day (inclusive)
+select(flights, -(year:day))
+####################################################################################################
+# Rename variable
+rename(flights, tail_num = tailnum)
+
+# To move variables to the start of the data frame
+select(flights, time_hour, air_time, everything())
+
+#mutate-----------
+
+flights_sml <- select(flights, 
+                      year:day, 
+                      ends_with("delay"), 
+                      distance, 
+                      air_time
+)
+
+mutate(flights_sml,
+       gain = arr_delay - dep_delay,
+       speed = distance / air_time * 60
+)
+
+# One can refer to columns that you’ve just created:
+mutate(flights_sml,
+       gain = arr_delay - dep_delay,
+       hours = air_time / 60,
+       gain_per_hour = gain / hours
+)  
+
+# To keep only the new variables use transmute()
+transmute(flights,
+          gain = arr_delay - dep_delay,
+          hours = air_time / 60,
+          gain_per_hour = gain / hours
+)  
+
+transmute(flights,
+          dep_time,
+          hour = dep_time %/% 100,
+          minute = dep_time %% 100
+)
+
+#summarise----------
+
+summarise(flights, delay = mean(dep_delay, na.rm = TRUE))
+
+by_day <- group_by(flights, year, month, day)
+View(summarise(by_day, delay = mean(dep_delay, na.rm = TRUE)))
+
+#pipes--------------
+
+by_dest <- group_by(flights, dest)
+delay <- summarise(by_dest,
+                   count = n(),
+                   dist = mean(distance, na.rm = TRUE),
+                   delay = mean(arr_delay, na.rm = TRUE)
+)
+delay <- filter(delay, count > 20, dest != "HNL")
+
+# It looks like delays increase with distance up to ~750 miles 
+# and then decrease. Maybe as flights get longer there's more 
+# ability to make up delays in the air?
+ggplot(data = delay, mapping = aes(x = dist, y = delay)) +
+  geom_point(aes(size = count), alpha = 1/3) +
+  geom_smooth(se = FALSE)
+
+# The same with pipes:
+delays <- flights %>% 
+  group_by(dest) %>% 
+  summarise(
+    count = n(),
+    dist = mean(distance, na.rm = TRUE),
+    delay = mean(arr_delay, na.rm = TRUE)
+  ) %>% 
+  filter(count > 20, dest != "HNL")
+
+
+# Not cancelled
+not_cancelled <- flights %>% 
+  filter(!is.na(dep_delay), !is.na(arr_delay))
+# %>% 
+#   group_by(year, month, day) %>% 
+#   summarise(mean = mean(dep_delay))
+
+delays <- not_cancelled %>% 
+  group_by(tailnum) %>% 
+  summarise(
+    delay = mean(arr_delay)
+  )
+
+ggplot(data = delays, mapping = aes(x = delay)) + 
+  geom_freqpoly(binwidth = 10)
+
+#
+delays <- not_cancelled %>% 
+  group_by(tailnum) %>% 
+  summarise(
+    delay = mean(arr_delay, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(data = delays, mapping = aes(x = n, y = delay)) + 
+  geom_point(alpha = 1/10)
+
+#
+delays %>% 
+  filter(n > 25) %>% 
+  ggplot(mapping = aes(x = n, y = delay)) + 
+  geom_point(alpha = 1/10)
+
+
+# To remove grouping
+daily <- group_by(flights, year, month, day)
+daily %>% 
+  ungroup() %>%             # no longer grouped by date
+  summarise(flights = n())
